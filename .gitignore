@@ -1,0 +1,11 @@
+# Python virtual environment
+/backend/venv/
+
+# Python cache
+/backend/__pycache__/
+
+# Python environment variables
+/backend/.env
+
+# Python database
+/backend/dev.db
