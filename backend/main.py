@@ -5,6 +5,7 @@ from models import User, Ticket
 from exts import db
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token, jwt_required
 
 app = Flask(__name__)
 app.config.from_object(DevConfig)
@@ -12,6 +13,7 @@ app.config.from_object(DevConfig)
 db.init_app(app)
 
 migrate = Migrate(app, db)
+JWTManager(app)
 
 api = Api(app, doc='/docs')
 
@@ -20,6 +22,14 @@ user_model = api.model(
     "User",
     {
         "id": fields.Integer(),
+        "username": fields.String(),
+        "password": fields.String()
+    }
+)
+
+login_model = api.model(
+    "Login",
+    {
         "username": fields.String(),
         "password": fields.String()
     }
@@ -59,12 +69,29 @@ class Signup(Resource):
 
         new_user.save()
 
-        return jsonify({"message": f"User has been sucessfully created!"})
+        return jsonify({"message": "User has been sucessfully created!"})
 
 @api.route('/login')
 class Login(Resource):
+    @api.expect(user_model)
     def post(self):
-        pass
+        data = request.get_json()
+
+        username = data.get('username')
+        password = data.get('password')
+
+        db_user = User.query.filter_by(username=username).first()
+
+        if db_user and check_password_hash(db_user.password, password):
+            access_token = create_access_token(identity=db_user.username)
+            refresh_token = create_refresh_token(identity=db_user.username)
+
+            return jsonify({"access_token": access_token, "refresh_token": refresh_token})
+
+        return jsonify({
+            "message": "User does not exist"
+        })
+
 
 
 @api.route('/users')
@@ -107,6 +134,7 @@ class UserResource(Resource):
 class TicketsResource(Resource):
 
     @api.marshal_list_with(ticket_model)
+    @jwt_required()
     def get(self):
         """Get Tickets"""
         tickets = Ticket.query.all()
@@ -114,6 +142,7 @@ class TicketsResource(Resource):
 
     @api.marshal_with(ticket_model)
     @api.expect(ticket_model)
+    @jwt_required()
     def post(self):
         """Create new Ticket"""
         data = request.get_json()
@@ -128,12 +157,14 @@ class TicketsResource(Resource):
 @api.route('/ticket/<int:id>')
 class TicketResource(Resource):
     @api.marshal_with(ticket_model)
+    @jwt_required()
     def get(self, id):
         """Get Ticket by id"""
         ticket = Ticket.query.get_or_404(id)
         return ticket
 
     @api.marshal_with(ticket_model)
+    @jwt_required()
     def put(self, id):
         """Update a Ticket by id"""
         ticket_to_update = Ticket.query.get_or_404(id)
@@ -143,6 +174,7 @@ class TicketResource(Resource):
         return ticket_to_update
 
     @api.marshal_with(ticket_model)
+    @jwt_required()
     def delete(self, id):
         """Delete a Ticket by id"""
         ticket_to_delete = Ticket.query.get_or_404(id)
