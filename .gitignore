@@ -9,3 +9,4 @@
 
 # Python database
 /backend/dev.db
+/backend/migrations
