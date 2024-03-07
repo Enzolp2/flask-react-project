@@ -1,13 +1,17 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_restx import Api, Resource, fields
 from config import DevConfig
 from models import User, Ticket
 from exts import db
+from flask_migrate import Migrate
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.config.from_object(DevConfig)
 
 db.init_app(app)
+
+migrate = Migrate(app, db)
 
 api = Api(app, doc='/docs')
 
@@ -30,33 +34,46 @@ ticket_model = api.model(
     }
 )
 
-
-""" Users API Endpoints """
 @api.route('/hello')
 class HelloResource(Resource):
     def get(self):
         """ Hello World Test Endpoint """
         return {"message": "Hello World"}
 
+@api.route('/signup')
+class Signup(Resource):
+    @api.expect(user_model)
+    def post(self):
+        """ SignUp a new user """
+        data = request.get_json()
+
+        username = data.get('username')
+        db_user = User.query.filter_by(username=username).first()
+
+        if db_user is not None:
+            return jsonify({"message": f"Username {username} already exists"})
+        new_user = User(
+            username = data.get('username'),
+            password = generate_password_hash(data.get('password')),
+        )
+
+        new_user.save()
+
+        return jsonify({"message": f"User has been sucessfully created!"})
+
+@api.route('/login')
+class Login(Resource):
+    def post(self):
+        pass
+
+
 @api.route('/users')
 class UsersResource(Resource):
-
     @api.marshal_list_with(user_model)
     def get(self):
         """Get all users"""
         users = User.query.all()
         return users
-
-    @api.marshal_with(user_model)
-    def post(self):
-        """Create a new user"""
-        data = request.get_json()
-        new_user = User(
-            username = data.get('username'),
-            password = data.get('password'),
-        )
-        new_user.save()
-        return new_user, 201
 
 
 @api.route('/user/<int:id>')
@@ -96,6 +113,7 @@ class TicketsResource(Resource):
         return tickets
 
     @api.marshal_with(ticket_model)
+    @api.expect(ticket_model)
     def post(self):
         """Create new Ticket"""
         data = request.get_json()
